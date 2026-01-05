@@ -1,0 +1,4 @@
+pysus==0.15.0
+pandas
+gluonts
+orjson

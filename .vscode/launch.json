@@ -1,0 +1,43 @@
+{
+    "configurations": [
+        
+        {
+            "name": "Python Debugger: Module",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "experiment_ttms",
+            "args": [
+                "--experiment_name", "exp2",
+                "--artifacts_path", "artifacts",
+                "--prediction_length", "24",
+                "--context_length", "32",
+                "--ckpt_path", "/path/to/checkpoint",
+                "--model_name", "ttms",
+                "--data_path", "data/sinan/newdata/ANIMBR_municipality_M_train.parquet",
+                "--num_samples", "100",
+                "--model_size", "small"
+            ],
+            "cwd": "${workspaceFolder}"
+            
+        },
+        {
+            "name": "Module Baseline",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "experiment_baseline",
+            "args": [
+                "--experiment_name", "exp_base",
+                "--artifacts_path", "artifacts",
+                "--prediction_length", "24",
+                "--context_length", "32",
+                "--ckpt_path", "/path/to/checkpoint",
+                "--model_name", "naive",
+                "--model_path", "not used",
+                "--data_path", "data/sinan/newdata/ANIMBR_municipality_M_train.parquet",
+                "--num_samples", "100",
+            ],
+            "cwd": "${workspaceFolder}"
+            
+        }
+    ]
+}

@@ -1,0 +1,4 @@
+git+https://github.com/time-series-foundation-models/lag-llama.git@c8d505d461c7e253e2845ae7604b6a07e39a5969
+gluonts==0.16.0
+torch==2.5.1
+ujson

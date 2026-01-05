@@ -1,0 +1,3 @@
+gluonts==0.16.0
+ujson
+mlflow
