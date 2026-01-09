@@ -36,7 +36,7 @@ class ChronosPredictor(RepresentablePredictor):
         self.num_samples = num_samples
 
     def predict(
-        self, dataset, batch_size: int = 1024, **kwargs
+        self, dataset, batch_size: int = 256, **kwargs
     ) -> Iterator[Forecast]:
         pipeline = self.pipeline
         predict_kwargs = (
@@ -48,8 +48,11 @@ class ChronosPredictor(RepresentablePredictor):
             try:
                 # Generate forecast samples
                 forecast_outputs = []
+                metadata = []  # Capture metadata during first iteration
                 for batch in batcher(dataset, batch_size=batch_size):
                     context = [torch.tensor(entry["target"]) for entry in batch]
+                    for entry in batch:
+                        metadata.append(entry)  # Store metadata here
                     forecast_outputs.append(
                         pipeline.predict(
                             context,
@@ -64,10 +67,11 @@ class ChronosPredictor(RepresentablePredictor):
                     f"OutOfMemoryError at batch_size {batch_size}, reducing to {batch_size // 2}"
                 )
                 batch_size //= 2
+                metadata = []  # Reset metadata on retry
 
-        # Convert forecast samples into gluonts Forecast objects
+        # Convert forecast samples into gluonts Forecast objects using captured metadata
         forecasts = []
-        for item, ts in zip(forecast_outputs, dataset):
+        for item, ts in zip(forecast_outputs, metadata):
             if pipeline.forecast_type == ForecastType.SAMPLES:
                 forecasts.append(
                     SampleForecast(samples=item, start_date=ts["start"] + len(ts["target"]), item_id=ts["item_id"])

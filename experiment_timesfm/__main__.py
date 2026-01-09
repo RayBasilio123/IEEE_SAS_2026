@@ -39,22 +39,24 @@ class TimesFmPredictor(RepresentablePredictor):
             logger.info('Jitting for new prediction length.')
         self.freq = timesfm.freq_map(ds_freq)
 
-    def predict(self, dataset, batch_size: int = 1024, **kwargs) -> Iterator[Forecast]:
+    def predict(self, dataset, batch_size: int = 256, **kwargs) -> Iterator[Forecast]:
         forecast_outputs = []
+        metadata = []  # Capture metadata during first iteration
         for batch in tqdm(batcher(dataset, batch_size=batch_size)):
             context = []
             for entry in batch:
                 arr = np.array(entry["target"])
                 context.append(arr)
+                metadata.append(entry)  # Store metadata here
             freqs = [self.freq] * len(context)
             _, full_preds = self.tfm.forecast(context, freqs, normalize=True)
             full_preds = full_preds[:, 0:self.prediction_length, 1:]
             forecast_outputs.append(full_preds.transpose((0, 2, 1)))
         forecast_outputs = np.concatenate(forecast_outputs)
 
-        # Convert forecast samples into gluonts Forecast objects
+        # Convert forecast samples into gluonts Forecast objects using captured metadata
         forecasts: list[Forecast] = []
-        for item, ts in zip(forecast_outputs, dataset):
+        for item, ts in zip(forecast_outputs, metadata):
             forecasts.append(
                 QuantileForecast(
                     forecast_arrays=item,

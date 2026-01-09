@@ -77,16 +77,18 @@ class TTMGluonTSPredictor(Predictor):
         """Predict.
         Args:
             test_data_input (InputDataset): Test input dataset.
-            batch_size (int, optional): Batch size. Defaults to 64.
+            batch_size (int, optional): Batch size. Defaults to 256.
         """
         while True:
             try:
                 # Generate forecast samples
                 forecast_samples = []
+                metadata = []  # Capture metadata during first iteration
                 for batch in batcher(dataset, batch_size=batch_size):
                     batch_ttm = {}
                     adjusted_batch_raw = []
                     for entry in batch:
+                        metadata.append(entry)  # Store metadata here
                         # univariate array of shape (time,)
                         # multivariate array of shape (var, time)
                         # TTM supports multivariate time series
@@ -175,11 +177,12 @@ class TTMGluonTSPredictor(Predictor):
                     f"OutOfMemoryError at batch_size {batch_size}, reducing to {batch_size // 2}"
                 )
                 batch_size //= 2
+                metadata = []  # Reset metadata on retry
         # Convert forecast samples into gluonts SampleForecast objects
         #   Array of size (num_samples, prediction_length) (1D case) or
         #   (num_samples, prediction_length, target_dim) (multivariate case)
         sample_forecasts: list[SampleForecast] = []
-        for item, ts in zip(forecast_samples, dataset):
+        for item, ts in zip(forecast_samples, metadata):
             sample_forecasts.append(
                 SampleForecast(
                     item_id=ts["item_id"],
