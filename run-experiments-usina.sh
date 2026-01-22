@@ -26,6 +26,7 @@ declare -A models
 models=(
     ["lagllama"]="lagllama /models/lag-llama.ckpt"
     ["auto_arima"]="baseline not-used"
+    ["naive"]="baseline not-used"
     ["auto_ets"]="baseline not-used"
     ["auto_theta"]="baseline not-used"
     ["tinytimemixer-r1"]="ttms granite-timeseries-ttm-r1"

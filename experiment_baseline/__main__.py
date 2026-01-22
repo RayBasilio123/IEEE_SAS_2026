@@ -48,9 +48,11 @@ def main():
     assert selected_model
     predictor_args = {
         "prediction_length": args.prediction_length,
-        "season_length": season_length,
         "quantile_levels": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
     }
+
+    if args.model_name != "naive":
+        predictor_args["season_length"] = season_length
 
     if args.model_name == "auto_ets":
         predictor_args["model"] = "AZN"
