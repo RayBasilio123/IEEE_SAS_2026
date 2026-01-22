@@ -25,13 +25,13 @@ def main():
         artifacts_path=args.artifacts_path,
         prediction_length=args.prediction_length,
         context_length=args.context_length,
+        frequency=args.frequency,
     )
     exp.run_experiment(
         model_name=args.model_name,
         dataset_path=args.data_path,
         predictor=ttm_predictor,
-        num_samples=args.num_samples,
-    )
+        num_samples=args.num_samples,        save_predictions=args.save_predictions,    )
 
 
 if __name__ == "__main__":

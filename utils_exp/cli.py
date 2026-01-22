@@ -11,6 +11,8 @@ class Args(argparse.Namespace):
     num_samples: int
     model_path: str
     batch_size: int
+    frequency: str
+    save_predictions: bool
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -46,6 +48,24 @@ def get_parser() -> argparse.ArgumentParser:
         type=int,
         default=1024,
         help="Batch size for model that needs to be specified",
+    )
+    parser.add_argument(
+        "--frequency",
+        type=str,
+        default="M",
+        help="Frequency of the time series (e.g., 'M' for monthly)",
+    )
+    parser.add_argument(
+        "--save_predictions",
+        action="store_true",
+        default=True,
+        help="Save predictions with metadata to parquet file (default: True)",
+    )
+    parser.add_argument(
+        "--no-save-predictions",
+        dest="save_predictions",
+        action="store_false",
+        help="Disable saving predictions",
     )
     return parser
 

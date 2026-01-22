@@ -31,6 +31,7 @@ def main():
         artifacts_path=args.artifacts_path,
         prediction_length=args.prediction_length,
         context_length=args.context_length,
+        frequency=args.frequency,
     )
 
 
@@ -67,6 +68,7 @@ def main():
         dataset_path=args.data_path,
         predictor=predictor,
         num_samples=args.num_samples,
+        save_predictions=args.save_predictions,
     )
 
 

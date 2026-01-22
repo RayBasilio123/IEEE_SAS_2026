@@ -10,9 +10,12 @@ import mlflow.client
 import mlflow.experiments
 from gluonts.dataset.common import FileDataset
 from gluonts.model.evaluation import evaluate_forecasts
-from gluonts.ev.metrics import MASE, MeanWeightedSumQuantileLoss, MSIS, NRMSE
+from gluonts.ev.metrics import MASE, MeanWeightedSumQuantileLoss, MSIS, NRMSE, MAE, SMAPE, RMSE, MAPE
+from gluonts.itertools import batcher
+from utils_exp.metrics import R2Score
 from utils_exp.splitter import TSFMExperimentSplitter
 import numpy as np
+import pandas as pd
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -34,6 +37,7 @@ class MLExperimentFacade:
         artifacts_path: str,
         prediction_length: int,
         context_length: int,
+        frequency: str,
         splitter: AbstractBaseSplitter | None = None,
     ):
         self.experiment_name = experiment_name
@@ -42,6 +46,7 @@ class MLExperimentFacade:
         self.splitter = splitter or TSFMExperimentSplitter(
             context_length=context_length
         )
+        self.frequency = frequency
         self.prediction_length = prediction_length
         if (exp := mlflow.get_experiment_by_name(self.experiment_name)) is None:
             self.experiment_id = mlflow.create_experiment(
@@ -51,7 +56,7 @@ class MLExperimentFacade:
             self.experiment_id: str = exp.experiment_id
 
     def run_experiment(
-        self, model_name: str, dataset_path, predictor: Predictor, num_samples: int
+        self, model_name: str, dataset_path, predictor: Predictor, num_samples: int, save_predictions: bool = True
     ) -> None:
         self.model_name = model_name
         mlflow.start_run(run_name=model_name, experiment_id=self.experiment_id)
@@ -62,15 +67,29 @@ class MLExperimentFacade:
                 "model_name": model_name,
                 "dataset_path": dataset_path,
                 "num_samples": num_samples,
+                "save_predictions": save_predictions,
             }
         )
 
-        dataset = self.get_data(dataset_path)
+        dataset = self.get_data(dataset_path, frequency=self.frequency)
         logger.info(f"Data loaded from {dataset_path}")
         forecast_it, ts_it = self.make_evaluation_predictions(
             predictor=predictor, dataset=dataset, num_samples=num_samples
         )
         forecast = list(forecast_it)
+        
+        # Save predictions before evaluation (test_data can be reused)
+        if save_predictions:
+            predictions_path = self._save_predictions(
+                forecasts=forecast,
+                test_data=ts_it,
+                model_name=model_name,
+                experiment_name=self.experiment_name,
+                context_length=self.context_length,
+                prediction_length=self.prediction_length,
+            )
+            mlflow.log_artifact(predictions_path)
+        
         metrics_disease = self._evaluate(forecast, ts_it, model_name, self.experiment_name, self.context_length, self.prediction_length, axis=None)
         metrics_all = self._evaluate(forecast, ts_it, model_name, self.experiment_name, self.context_length, self.prediction_length,  axis=1)
         logger.info(f"Metrics calculated")
@@ -78,10 +97,10 @@ class MLExperimentFacade:
         mlflow.log_artifact(metrics_all)
         mlflow.end_run()
 
-    def get_data(self, path: str) -> Dataset:
+    def get_data(self, path: str, frequency: str) -> Dataset:
         return FileDataset(
             path=Path(path), 
-            freq="M"
+            freq=frequency
         )
 
     def make_evaluation_predictions(
@@ -133,6 +152,8 @@ class MLExperimentFacade:
                     MeanWeightedSumQuantileLoss(np.arange(0.1, 1.0, 0.1)),
                     MSIS(),
                     NRMSE(forecast_type="0.5"),
+                    R2Score(forecast_type="0.5"),
+                    MAE(), SMAPE(), RMSE(), MAPE()
                 ],
                 axis=axis,
             )
@@ -142,7 +163,7 @@ class MLExperimentFacade:
         metrics["Context"] = contex_length
         metrics["Prediction"] = prediction_length
         metrics = metrics.rename(
-                columns={"MASE[0.5]": "MASE", "mean_weighted_sum_quantile_loss": "CPRS", "NRMSE[0.5]": "NRMSE"}
+            columns={"MASE[0.5]": "MASE", "mean_weighted_sum_quantile_loss": "CPRS", "NRMSE[0.5]": "NRMSE", "R2[0.5]": "R2"}
         )
         if axis is not None:
             metrics.reset_index(inplace=True)
@@ -151,3 +172,119 @@ class MLExperimentFacade:
         path = f"{self.artifacts_path}/metric_{sufix}.csv"
         metrics.to_csv(path, mode='a', index=False, header=not os.path.exists(path))
         return path
+
+    def _save_predictions(
+        self,
+        forecasts: list[Forecast],
+        test_data: TestData,
+        model_name: str,
+        experiment_name: str,
+        context_length: int,
+        prediction_length: int,
+        batch_size: int = 100,
+    ) -> str:
+        """
+        Save predictions along with actual values and metadata to a parquet file.
+
+        Parameters
+        ----------
+        forecasts
+            List of forecast objects from model predictions.
+        test_data
+            TestData object containing input and label data.
+        model_name
+            Name of the model.
+        experiment_name
+            Name of the experiment.
+        context_length
+            Length of the context window.
+        prediction_length
+            Length of the prediction horizon.
+        batch_size
+            Batch size for processing forecasts.
+
+        Returns
+        -------
+        Path to the saved predictions file.
+        """
+        logger.info("Saving predictions with metadata")
+        
+        # Standard quantile levels used across experiments
+        quantile_levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        
+        rows = []
+        window_index = 0
+        
+        # Batch iteration matching GluonTS evaluation pattern
+        input_batches = batcher(test_data.input, batch_size=batch_size)
+        label_batches = batcher(test_data.label, batch_size=batch_size)
+        forecast_batches = batcher(forecasts, batch_size=batch_size)
+        
+        for input_batch, label_batch, forecast_batch in zip(
+            input_batches, label_batches, forecast_batches
+        ):
+            # Process each window in the batch
+            for input_entry, label_entry, forecast in zip(
+                input_batch, label_batch, forecast_batch
+            ):
+                item_id = forecast.item_id
+                forecast_start = forecast.start_date
+                actual_values = label_entry["target"]
+                
+                # Extract forecast values
+                predicted_mean = forecast.mean
+                
+                # Extract quantiles - handle both QuantileForecast and SampleForecast
+                quantile_values = {}
+                for q in quantile_levels:
+                    try:
+                        quantile_values[f"p{int(q*100)}"] = forecast.quantile(q)
+                    except (AttributeError, KeyError):
+                        # If quantile not available, set to None
+                        quantile_values[f"p{int(q*100)}"] = None
+                
+                # Create a row for each horizon step
+                for step in range(prediction_length):
+                    row = {
+                        "model_name": model_name,
+                        "experiment_name": experiment_name,
+                        "item_id": item_id,
+                        "context_length": context_length,
+                        "prediction_length": prediction_length,
+                        "window_index": window_index,
+                        "forecast_start": str(forecast_start),
+                        "horizon_step": step + 1,  # 1-indexed for clarity
+                        "actual_value": float(actual_values[step]) if step < len(actual_values) else None,
+                        "predicted_mean": float(predicted_mean[step]),
+                    }
+                    
+                    # Add quantile predictions
+                    for q_name, q_values in quantile_values.items():
+                        if q_values is not None:
+                            row[f"predicted_{q_name}"] = float(q_values[step])
+                        else:
+                            row[f"predicted_{q_name}"] = None
+                    
+                    rows.append(row)
+                
+                window_index += 1
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(rows)
+        
+        # Ensure predictions directory exists
+        predictions_dir = Path(self.artifacts_path) / "predictions"
+        predictions_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save to parquet with append logic
+        predictions_path = predictions_dir / "predictions.parquet"
+        
+        if predictions_path.exists():
+            # Append to existing file
+            existing_df = pd.read_parquet(predictions_path)
+            df = pd.concat([existing_df, df], ignore_index=True)
+        
+        df.to_parquet(predictions_path, index=False)
+        logger.info(f"Saved {len(rows)} prediction rows to {predictions_path}")
+        
+        return str(predictions_path)

@@ -51,10 +51,12 @@ if __name__ == "__main__":
         artifacts_path=args.artifacts_path,
         prediction_length=prediction_length,
         context_length=args.context_length,
+        frequency=args.frequency,
     )
     exp.run_experiment(
         args.model_name,
         args.data_path,
         predictor,
         args.num_samples,
+        save_predictions=args.save_predictions,
     )
