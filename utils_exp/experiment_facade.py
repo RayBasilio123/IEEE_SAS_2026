@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from utils_exp.fixed_window_splitter import FixedWindowSplitter
 import mlflow
 import mlflow.client
 import mlflow.experiments
@@ -43,8 +44,12 @@ class MLExperimentFacade:
         self.experiment_name = experiment_name
         self.artifacts_path = artifacts_path
         self.context_length = context_length
-        self.splitter = splitter or TSFMExperimentSplitter(
-            context_length=context_length
+        # self.splitter = splitter or TSFMExperimentSplitter(
+        #     context_length=context_length
+        # )
+        self.splitter = splitter or FixedWindowSplitter(
+            window_size=context_length,
+            step_size=prediction_length,
         )
         self.frequency = frequency
         self.prediction_length = prediction_length
