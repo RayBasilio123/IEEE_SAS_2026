@@ -12,7 +12,7 @@ The Data Extractor has a distinct structure from the others and has its own Dock
 
 ## Dataset
 
-The dataset is extracted from SINAN/BR. The code to fetch and manipulate the data is located in the `data_provider` folder. The processed dataset is available in the `data` folder.
+The code to fetch and manipulate the data is located in the `data_provider` folder. The processed dataset is available in the `data` folder.
 
 ## Usage
 
